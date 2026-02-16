@@ -34,6 +34,9 @@ const ITEMS = [
 // ---- Сесії покупки
 // userId -> { step, itemId, data }
 const sessions = new Map();
+// запам'ятовуємо останній переглянутий товар, щоб авто-стартувати замовлення
+const lastViewed = new Map(); // userId -> { itemId, ts }
+const LAST_VIEW_MS = 10 * 60 * 1000; // 10 хв
 
 // антиспам: 1 оформлення раз на 60 сек
 const cooldown = new Map();
@@ -96,10 +99,9 @@ bot.action(/^item_(\d+)$/, async (ctx) => {
   const id = Number(ctx.match[1]);
   const item = ITEMS.find((x) => x.id === id);
   if (!item) return ctx.answerCbQuery("Не знайшов товар");
-
+lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
   await ctx.answerCbQuery();
-  await ctx.reply(
-    `👜 ${item.title}\n💰 Ціна: ${item.price} грн\n📌 ${item.desc}\n\nНатисни ✅ Купити, якщо хочеш оформити.`,
+ await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
     itemKeyboard(item.id)
   );
 });
@@ -119,6 +121,7 @@ bot.action(/^buy_(\d+)$/, async (ctx) => {
   const userId = ctx.from.id;
   const itemId = Number(ctx.match[1]);
   const item = ITEMS.find((x) => x.id === itemId);
+  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
   if (!item) return ctx.answerCbQuery("Не знайшов товар");
 
   if (isCoolingDown(userId)) {
@@ -128,13 +131,25 @@ bot.action(/^buy_(\d+)$/, async (ctx) => {
 
   sessions.set(userId, { step: 1, itemId, data: {} });
   await ctx.answerCbQuery("Оформлення");
-  await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Як тебе звати?`);
+ await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
 });
 
 // ---- Текст: або оформлення, або підтримка
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   const text = (ctx.message.text || "").trim();
+    // ✅ Якщо людина не в сесії оформлення, але щойно дивилась товар — автостарт замовлення
+  if (!sessions.get(userId)) {
+    const lv = lastViewed.get(userId);
+    if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
+      if (!isCoolingDown(userId)) {
+        // перше повідомлення рахуємо як ПІБ
+        sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
+        return ctx.reply("2/4: Телефон або @нік для зв’язку?");
+      }
+    }
+  }
+
 
   const sess = sessions.get(userId);
   if (sess) {
