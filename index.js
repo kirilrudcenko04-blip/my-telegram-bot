@@ -134,21 +134,19 @@ bot.action(/^buy_(\d+)$/, async (ctx) => {
  await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
 });
 
-// ---- Текст: або оформлення, або підтримка
-bot.on("text", async (ctx) => {
-  const userId = ctx.from.id;
-  const text = (ctx.message.text || "").trim();
-    // ✅ Якщо людина не в сесії оформлення, але щойно дивилась товар — автостарт замовлення
-  if (!sessions.get(userId)) {
-    const lv = lastViewed.get(userId);
-    if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
-      if (!isCoolingDown(userId)) {
-        // перше повідомлення рахуємо як ПІБ
-        sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
-        return ctx.reply("2/4: Телефон або @нік для зв’язку?");
-      }
+// ✅ Якщо людина не в сесії оформлення, але щойно дивилась товар — автостарт замовлення
+if (!sessions.get(userId)) {
+  const lv = lastViewed.get(userId);
+  if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
+    if (!isCoolingDown(userId)) {
+      // перше повідомлення рахуємо як ПІБ
+      sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
+      return ctx.reply("2/4: Телефон або @нік для зв’язку?");
+    } else {
+      return ctx.reply("⏳ Зачекай хвилинку перед новим оформленням 🙌");
     }
   }
+}
 
 
   const sess = sessions.get(userId);
