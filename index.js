@@ -206,15 +206,15 @@ bot.on("text", async (ctx) => {
 
       return ctx.reply("✅ Замовлення прийнято! Ми скоро з тобою зв’яжемось 🙌", mainMenu());
     }
-  }
+  
 
   // підтримка: будь-який текст відправляємо адміну
-  const username = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
+  const username2 = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
   const forward =
     "💬 ПОВІДОМЛЕННЯ В МАГАЗИН-БОТІ\n\n" +
     `Текст: ${text}\n\n` +
     `🆔 UserID: ${userId}\n` +
-    `🔗 Username: ${username}`;
+    `🔗 Username: ${username2}`;
 
   try {
     await ctx.telegram.sendMessage(ADMIN_ID, forward);
@@ -222,7 +222,7 @@ bot.on("text", async (ctx) => {
     console.log("Не зміг відправити адміну:", e?.message || e);
   }
 
-  ctx.reply("Прийняв ✅", mainMenu());
+  ctx.reply("Прийняв ✅", mainMenu();
 });
 
 // ---- Ловимо помилки, щоб не падав Render
