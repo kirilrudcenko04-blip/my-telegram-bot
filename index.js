@@ -200,7 +200,7 @@ bot.on("text", async (ctx) => {
       } catch (e) {
         console.log("Не зміг відправити адміну:", e?.message || e);
       }
-
+      
       sessions.delete(userId);
       setCooldown(userId);
 
