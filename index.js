@@ -1,19 +1,24 @@
 const { Telegraf, Markup } = require("telegraf");
+const http = require("http");
 
 const token = process.env.BOT_TOKEN;
-if (!token) {
-  throw new Error("Нема BOT_TOKEN. Додай змінну на Render.");
-}
+if (!token) throw new Error("Нема BOT_TOKEN");
 
 const bot = new Telegraf(token);
+
+// Простий веб-сервер для Render (щоб було що пінгати)
+const port = process.env.PORT || 3000;
+http
+  .createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+  })
+  .listen(port, () => console.log("Health server running on port", port));
 
 bot.start((ctx) => {
   ctx.reply(
     "🔥 Привіт! Я бот.\nОбери дію:",
-    Markup.keyboard([
-      ["📦 Прайс", "📩 Заявка"],
-      ["🧠 Підтримка"]
-    ]).resize()
+    Markup.keyboard([["📦 Прайс", "📩 Заявка"], ["🧠 Підтримка"]]).resize()
   );
 });
 
