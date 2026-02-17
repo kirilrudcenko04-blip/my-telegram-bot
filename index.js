@@ -5,9 +5,9 @@ const token = process.env.BOT_TOKEN;
 if (!token) throw new Error("Нема BOT_TOKEN");
 
 const ADMIN_ID = Number(process.env.ADMIN_ID || "8412933435");
-const PORT = process.env.PORT || 3000;
 
-// ---- HEALTH (для Render + UptimeRobot)
+// -------- Health endpoint (Render/UptimeRobot)
+const PORT = process.env.PORT || 3000;
 http
   .createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -17,7 +17,7 @@ http
 
 const bot = new Telegraf(token);
 
-// ---- 10 позицій (міняєш тут назви/ціни/описи)
+// -------- 10 позицій (міняй під свої сумки)
 const ITEMS = [
   { id: 1, title: "Coach Tabby (Premium)", price: 1500, desc: "26×14×6.5см • ремінець • коробка+пильник" },
   { id: 2, title: "Michael Kors Tote", price: 1700, desc: "29.5×27.5×13см • на блискавці • кишені" },
@@ -26,15 +26,16 @@ const ITEMS = [
   { id: 5, title: "Prada Mini (1:1)", price: 2700, desc: "20×11×10см • шкіра • коробка+пильник" },
   { id: 6, title: "Miu Miu Aventure", price: 2600, desc: "32×18×11см • шкіра • без ременя" },
   { id: 7, title: "D&G DG9012", price: 3400, desc: "шкіра • 2 відділи • фурнітура бренд" },
-  { id: 8, title: "Сумка Chanel Premium", price: 1800, desc: "24.5×14×8см • шкіра • комплект пакування" },
-  { id: 9, title: "Сумка крос-боді", price: 900, desc: "компактна • на кожен день • 2 кишені" },
-  { id: 10, title: "Сумка багет", price: 1100, desc: "модна форма • коротка ручка • легка" }
+  { id: 8, title: "Chanel Premium", price: 1800, desc: "24.5×14×8см • шкіра • комплект пакування" },
+  { id: 9, title: "Cross-body", price: 900, desc: "компактна • 2 кишені • на кожен день" },
+  { id: 10, title: "Baguette", price: 1100, desc: "модна форма • коротка ручка • легка" }
 ];
 
-// ---- Сесії покупки
+// -------- Сесії замовлення
 // userId -> { step, itemId, data }
 const sessions = new Map();
-// запам'ятовуємо останній переглянутий товар, щоб авто-стартувати замовлення
+
+// запам’ятовуємо останній переглянутий товар (щоб авто-стартувати замовлення з першого тексту)
 const lastViewed = new Map(); // userId -> { itemId, ts }
 const LAST_VIEW_MS = 10 * 60 * 1000; // 10 хв
 
@@ -49,14 +50,11 @@ function mainMenu() {
 }
 
 function catalogKeyboard() {
-  // 10 кнопок в інлайн-меню
   const rows = [];
   for (let i = 0; i < ITEMS.length; i += 2) {
     const a = ITEMS[i];
     const b = ITEMS[i + 1];
-    const row = [
-      Markup.button.callback(`${a.id}. ${a.title}`, `item_${a.id}`)
-    ];
+    const row = [Markup.button.callback(`${a.id}. ${a.title}`, `item_${a.id}`)];
     if (b) row.push(Markup.button.callback(`${b.id}. ${b.title}`, `item_${b.id}`));
     rows.push(row);
   }
@@ -81,7 +79,7 @@ bot.hears("👜 Каталог", async (ctx) => {
 
 bot.hears("📦 Доставка/Оплата", (ctx) => {
   ctx.reply(
-    "📦 Доставка/Оплата:\n• Нова Пошта / Укрпошта\n• Оплата: повна або передоплата (як ти скажеш)\n\nЩоб замовити — зайди в 👜 Каталог."
+    "📦 Доставка/Оплата:\n• Нова Пошта / Укрпошта\n• Оплата: повна або передоплата\n\nЩоб замовити — зайди в 👜 Каталог."
   );
 });
 
@@ -94,14 +92,18 @@ bot.command("cancel", (ctx) => {
   ctx.reply("Скасовано ✅", mainMenu());
 });
 
-// ---- Callback: показ товару
+// -------- Показ товару
 bot.action(/^item_(\d+)$/, async (ctx) => {
   const id = Number(ctx.match[1]);
   const item = ITEMS.find((x) => x.id === id);
   if (!item) return ctx.answerCbQuery("Не знайшов товар");
-lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
+
+  // запам’ятали, що він дивився цей товар
+  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
+
   await ctx.answerCbQuery();
- await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
+  await ctx.reply(
+    `👜 ${item.title}\n💰 Ціна: ${item.price} грн\n📌 ${item.desc}\n\nНатисни ✅ Купити, або просто напиши ПІБ — і бот почне оформлення.`,
     itemKeyboard(item.id)
   );
 });
@@ -116,13 +118,15 @@ bot.action("to_menu", async (ctx) => {
   await ctx.reply("Меню 👇", mainMenu());
 });
 
-// ---- Callback: старт покупки
+// -------- Старт покупки по кнопці "Купити"
 bot.action(/^buy_(\d+)$/, async (ctx) => {
   const userId = ctx.from.id;
   const itemId = Number(ctx.match[1]);
   const item = ITEMS.find((x) => x.id === itemId);
-  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
   if (!item) return ctx.answerCbQuery("Не знайшов товар");
+
+  // також запам’ятаємо товар (на випадок, якщо він почне писати)
+  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
 
   if (isCoolingDown(userId)) {
     await ctx.answerCbQuery();
@@ -130,24 +134,29 @@ bot.action(/^buy_(\d+)$/, async (ctx) => {
   }
 
   sessions.set(userId, { step: 1, itemId, data: {} });
+
   await ctx.answerCbQuery("Оформлення");
- await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
+  await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
 });
 
-// ✅ Якщо людина не в сесії оформлення, але щойно дивилась товар — автостарт замовлення
-if (!sessions.get(userId)) {
-  const lv = lastViewed.get(userId);
-  if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
-    if (!isCoolingDown(userId)) {
-      // перше повідомлення рахуємо як ПІБ
-      sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
-      return ctx.reply("2/4: Телефон або @нік для зв’язку?");
-    } else {
-      return ctx.reply("⏳ Зачекай хвилинку перед новим оформленням 🙌");
+// -------- Текст: або оформлення, або підтримка
+bot.on("text", async (ctx) => {
+  const userId = ctx.from.id;
+  const text = (ctx.message.text || "").trim();
+
+  // ✅ Авто-старт замовлення: якщо він дивився товар і просто написав текст
+  if (!sessions.get(userId)) {
+    const lv = lastViewed.get(userId);
+    if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
+      if (!isCoolingDown(userId)) {
+        // перше повідомлення = ПІБ
+        sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
+        return ctx.reply("2/4: Телефон або @нік для зв’язку?");
+      } else {
+        return ctx.reply("⏳ Зачекай хвилинку перед новим оформленням 🙌");
+      }
     }
   }
-}
-
 
   const sess = sessions.get(userId);
   if (sess) {
@@ -158,7 +167,7 @@ if (!sessions.get(userId)) {
     }
 
     if (sess.step === 1) {
-      sess.data.name = text;
+      sess.data.name = text; // ПІБ
       sess.step = 2;
       sessions.set(userId, sess);
       return ctx.reply("2/4: Телефон або @нік для зв’язку?");
@@ -186,7 +195,7 @@ if (!sessions.get(userId)) {
         "🛒 НОВЕ ЗАМОВЛЕННЯ\n\n" +
         `👜 Товар: ${item.title}\n` +
         `💰 Ціна: ${item.price} грн\n\n` +
-        `👤 Ім'я: ${sess.data.name}\n` +
+        `👤 ПІБ: ${sess.data.name}\n` +
         `📞 Контакт: ${sess.data.contact}\n` +
         `📦 Доставка: ${sess.data.delivery}\n` +
         `📝 Коментар: ${sess.data.comment}\n\n` +
@@ -198,21 +207,21 @@ if (!sessions.get(userId)) {
       } catch (e) {
         console.log("Не зміг відправити адміну:", e?.message || e);
       }
-      
+
       sessions.delete(userId);
       setCooldown(userId);
 
       return ctx.reply("✅ Замовлення прийнято! Ми скоро з тобою зв’яжемось 🙌", mainMenu());
     }
-  
+  }
 
-  // підтримка: будь-який текст відправляємо адміну
-  const username2 = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
+  // Підтримка: будь-який текст (коли він НЕ оформлює) — адміну
+  const usernameSupport = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
   const forward =
     "💬 ПОВІДОМЛЕННЯ В МАГАЗИН-БОТІ\n\n" +
     `Текст: ${text}\n\n` +
     `🆔 UserID: ${userId}\n` +
-    `🔗 Username: ${username2}`;
+    `🔗 Username: ${usernameSupport}`;
 
   try {
     await ctx.telegram.sendMessage(ADMIN_ID, forward);
@@ -220,13 +229,23 @@ if (!sessions.get(userId)) {
     console.log("Не зміг відправити адміну:", e?.message || e);
   }
 
-  ctx.reply("Прийняв ✅", mainMenu();
+  return ctx.reply("Прийняв ✅", mainMenu());
 });
 
-// ---- Ловимо помилки, щоб не падав Render
+// -------- Щоб Render не падав
 bot.catch((err) => console.log("BOT ERROR:", err));
 
-bot.launch({ dropPendingUpdates: true });
+(async () => {
+  try {
+    // прибираємо webhook і чистимо старі апдейти
+    await bot.telegram.deleteWebhook({ drop_pending_updates: true });
+    await bot.launch({ dropPendingUpdates: true });
+    console.log("Bot launched");
+  } catch (e) {
+    console.log("Launch failed:", e?.message || e);
+    process.exit(1);
+  }
+})();
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
