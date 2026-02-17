@@ -6,7 +6,7 @@ if (!token) throw new Error("Нема BOT_TOKEN");
 
 const ADMIN_ID = Number(process.env.ADMIN_ID || "8412933435");
 
-// -------- Health endpoint (Render/UptimeRobot)
+// ===== Health endpoint (Render/UptimeRobot)
 const PORT = process.env.PORT || 3000;
 http
   .createServer((req, res) => {
@@ -17,100 +17,50 @@ http
 
 const bot = new Telegraf(token);
 
-// -------- 10 позицій (міняй під свої сумки)
-const ITEMS = [
-  { id: 1, title: "Coach Tabby (Premium)", price: 1500, desc: "26×14×6.5см • ремінець • коробка+пильник" },
-  { id: 2, title: "Michael Kors Tote", price: 1700, desc: "29.5×27.5×13см • на блискавці • кишені" },
-  { id: 3, title: "Guess Noelle 2в1", price: 1200, desc: "29×15×6см • регульована ручка • монетниця" },
-  { id: 4, title: "Gucci Ophidia (eco)", price: 1500, desc: "23×14×6см • цепочка • QR бірка" },
-  { id: 5, title: "Prada Mini (1:1)", price: 2700, desc: "20×11×10см • шкіра • коробка+пильник" },
-  { id: 6, title: "Miu Miu Aventure", price: 2600, desc: "32×18×11см • шкіра • без ременя" },
-  { id: 7, title: "D&G DG9012", price: 3400, desc: "шкіра • 2 відділи • фурнітура бренд" },
-  { id: 8, title: "Chanel Premium", price: 1800, desc: "24.5×14×8см • шкіра • комплект пакування" },
-  { id: 9, title: "Cross-body", price: 900, desc: "компактна • 2 кишені • на кожен день" },
-  { id: 10, title: "Baguette", price: 1100, desc: "модна форма • коротка ручка • легка" }
-];
+// ===== Налаштування STO (під себе відредагуєш)
+const STO = {
+  name: "STO • Швидкий запис",
+  city: "Київ",
+  address: "вул. Прикладна, 10",
+  hours: "Пн–Сб 09:00–19:00",
+  phone: "+380 (__) ___ __ __",
+  instagram: "@sto.example",
+  services: [
+    "Діагностика ходової — 300 грн",
+    "Заміна масла — від 400 грн",
+    "Гальма (колодки/диски) — від 500 грн",
+    "Розвал-сходження — 700 грн",
+    "Електрика — від 400 грн",
+  ],
+  promo: "🔥 Акція: діагностика -20% при записі через бота",
+};
 
-// -------- Сесії замовлення
-// userId -> { step, itemId, data }
-const sessions = new Map();
-
-// запам’ятовуємо останній переглянутий товар (щоб авто-стартувати замовлення з першого тексту)
-const lastViewed = new Map(); // userId -> { itemId, ts }
-const LAST_VIEW_MS = 10 * 60 * 1000; // 10 хв
-
-// антиспам: 1 оформлення раз на 60 сек
+// ===== Антиспам
 const cooldown = new Map();
 const COOLDOWN_MS = 60 * 1000;
 const isCoolingDown = (uid) => Date.now() - (cooldown.get(uid) || 0) < COOLDOWN_MS;
 const setCooldown = (uid) => cooldown.set(uid, Date.now());
 
+// ===== Сесії заявки
+// userId -> { step, data }
+const sessions = new Map();
+
 function mainMenu() {
-  return Markup.keyboard([["👜 Каталог", "📦 Доставка/Оплата"], ["🧑‍💬 Підтримка"]]).resize();
+  return Markup.keyboard([
+    ["🛠️ Запис/Заявка", "💸 Прайс"],
+    ["📍 Адреса", "🧑‍💬 Підтримка"],
+  ]).resize();
 }
 
-function catalogKeyboard() {
-  const rows = [];
-  for (let i = 0; i < ITEMS.length; i += 2) {
-    const a = ITEMS[i];
-    const b = ITEMS[i + 1];
-    const row = [Markup.button.callback(`${a.id}. ${a.title}`, `item_${a.id}`)];
-    if (b) row.push(Markup.button.callback(`${b.id}. ${b.title}`, `item_${b.id}`));
-    rows.push(row);
-  }
-  rows.push([Markup.button.callback("⬅️ В меню", "to_menu")]);
-  return Markup.inlineKeyboard(rows);
-}
-
-function itemKeyboard(itemId) {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback("✅ Купити", `buy_${itemId}`)],
-    [Markup.button.callback("⬅️ Назад в каталог", "to_catalog")]
-  ]);
+function backToMenuInline() {
+  return Markup.inlineKeyboard([[Markup.button.callback("⬅️ В меню", "to_menu")]]);
 }
 
 bot.start((ctx) => {
-  ctx.reply("Вітаю! Це магазин сумок 👜\nОбери дію 👇", mainMenu());
-});
-
-bot.hears("👜 Каталог", async (ctx) => {
-  await ctx.reply("Ось наші позиції (10 шт). Натисни на сумку 👇", catalogKeyboard());
-});
-
-bot.hears("📦 Доставка/Оплата", (ctx) => {
   ctx.reply(
-    "📦 Доставка/Оплата:\n• Нова Пошта / Укрпошта\n• Оплата: повна або передоплата\n\nЩоб замовити — зайди в 👜 Каталог."
+    `🚗 ${STO.name}\n${STO.promo}\n\nОбери дію 👇`,
+    mainMenu()
   );
-});
-
-bot.hears("🧑‍💬 Підтримка", (ctx) => {
-  ctx.reply("Напиши питання текстом — я передам адміну ✅");
-});
-
-bot.command("cancel", (ctx) => {
-  sessions.delete(ctx.from.id);
-  ctx.reply("Скасовано ✅", mainMenu());
-});
-
-// -------- Показ товару
-bot.action(/^item_(\d+)$/, async (ctx) => {
-  const id = Number(ctx.match[1]);
-  const item = ITEMS.find((x) => x.id === id);
-  if (!item) return ctx.answerCbQuery("Не знайшов товар");
-
-  // запам’ятали, що він дивився цей товар
-  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
-
-  await ctx.answerCbQuery();
-  await ctx.reply(
-    `👜 ${item.title}\n💰 Ціна: ${item.price} грн\n📌 ${item.desc}\n\nНатисни ✅ Купити, або просто напиши ПІБ — і бот почне оформлення.`,
-    itemKeyboard(item.id)
-  );
-});
-
-bot.action("to_catalog", async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply("Каталог 👇", catalogKeyboard());
 });
 
 bot.action("to_menu", async (ctx) => {
@@ -118,110 +68,106 @@ bot.action("to_menu", async (ctx) => {
   await ctx.reply("Меню 👇", mainMenu());
 });
 
-// -------- Старт покупки по кнопці "Купити"
-bot.action(/^buy_(\d+)$/, async (ctx) => {
-  const userId = ctx.from.id;
-  const itemId = Number(ctx.match[1]);
-  const item = ITEMS.find((x) => x.id === itemId);
-  if (!item) return ctx.answerCbQuery("Не знайшов товар");
-
-  // також запам’ятаємо товар (на випадок, якщо він почне писати)
-  lastViewed.set(ctx.from.id, { itemId: item.id, ts: Date.now() });
-
-  if (isCoolingDown(userId)) {
-    await ctx.answerCbQuery();
-    return ctx.reply("⏳ Зачекай хвилинку перед новим оформленням 🙌");
-  }
-
-  sessions.set(userId, { step: 1, itemId, data: {} });
-
-  await ctx.answerCbQuery("Оформлення");
-  await ctx.reply(`✅ Оформляємо: ${item.title}\n\n1/4: Введи ПІБ (прізвище, ім’я, по батькові):`);
+bot.hears("💸 Прайс", (ctx) => {
+  ctx.reply(
+    `💸 Прайс / Послуги:\n• ${STO.services.join("\n• ")}\n\nЩоб записатися — натисни 🛠️ Запис/Заявка.`,
+    backToMenuInline()
+  );
 });
 
-// -------- Текст: або оформлення, або підтримка
+bot.hears("📍 Адреса", (ctx) => {
+  ctx.reply(
+    `📍 Адреса:\n${STO.city}, ${STO.address}\n🕒 Графік: ${STO.hours}\n📞 Тел: ${STO.phone}\n📷 Insta: ${STO.instagram}`,
+    backToMenuInline()
+  );
+});
+
+bot.hears("🧑‍💬 Підтримка", (ctx) => {
+  ctx.reply("Напиши питання одним повідомленням — передам адміну ✅");
+});
+
+bot.command("cancel", (ctx) => {
+  sessions.delete(ctx.from.id);
+  ctx.reply("Скасовано ✅", mainMenu());
+});
+
+bot.hears("🛠️ Запис/Заявка", async (ctx) => {
+  const uid = ctx.from.id;
+  if (isCoolingDown(uid)) return ctx.reply("⏳ Зачекай хвилинку перед новою заявкою 🙌");
+
+  sessions.set(uid, { step: 1, data: {} });
+  await ctx.reply("✅ Ок, оформимо заявку.\n\n1/5: Введи ПІБ (прізвище, ім’я, по батькові):");
+});
+
 bot.on("text", async (ctx) => {
-  const userId = ctx.from.id;
+  const uid = ctx.from.id;
   const text = (ctx.message.text || "").trim();
 
-  // ✅ Авто-старт замовлення: якщо він дивився товар і просто написав текст
-  if (!sessions.get(userId)) {
-    const lv = lastViewed.get(userId);
-    if (lv && Date.now() - lv.ts < LAST_VIEW_MS) {
-      if (!isCoolingDown(userId)) {
-        // перше повідомлення = ПІБ
-        sessions.set(userId, { step: 2, itemId: lv.itemId, data: { name: text } });
-        return ctx.reply("2/4: Телефон або @нік для зв’язку?");
-      } else {
-        return ctx.reply("⏳ Зачекай хвилинку перед новим оформленням 🙌");
-      }
-    }
-  }
-
-  const sess = sessions.get(userId);
+  const sess = sessions.get(uid);
   if (sess) {
-    const item = ITEMS.find((x) => x.id === sess.itemId);
-    if (!item) {
-      sessions.delete(userId);
-      return ctx.reply("Товар не знайдено. Спробуй ще раз.", mainMenu());
-    }
-
     if (sess.step === 1) {
-      sess.data.name = text; // ПІБ
+      sess.data.name = text;
       sess.step = 2;
-      sessions.set(userId, sess);
-      return ctx.reply("2/4: Телефон або @нік для зв’язку?");
+      sessions.set(uid, sess);
+      return ctx.reply("2/5: Телефон або @нік для зв’язку?");
     }
-
     if (sess.step === 2) {
       sess.data.contact = text;
       sess.step = 3;
-      sessions.set(userId, sess);
-      return ctx.reply("3/4: Місто та служба доставки (НП/УП)?");
+      sessions.set(uid, sess);
+      return ctx.reply("3/5: Марка/модель авто (наприклад: VW Passat B7)?");
     }
-
-    if (sess.step === 3) {
-      sess.data.delivery = text;
+    if (sess.steps
+step === 3) {
+      sess.data.car = text;
       sess.step = 4;
-      sessions.set(userId, sess);
-      return ctx.reply("4/4: Коментар (колір/передоплата/інші побажання). Якщо нема — напиши “-”");
+      sessions.set(uid, sess);
+      return ctx.reply("4/5: Що потрібно зробити? (коротко: масло/гальма/діагностика/інше)");
     }
-
     if (sess.step === 4) {
-      sess.data.comment = text;
+      sess.data.problem = text;
+      sess.step = 5;
+      sessions.set(uid, sess);
+      return ctx.reply("5/5: Бажаний день/час (наприклад: завтра 15:00). Якщо не важливо — напиши “будь-коли”.");
+    }
+    if (sess.step === 5) {
+      sess.data.time = text;
 
       const username = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
+      const contactBtn = Markup.inlineKeyboard([
+        [Markup.button.url("✉️ Написати клієнту", `tg://user?id=${uid}`)],
+      ]);
+
       const msg =
-        "🛒 НОВЕ ЗАМОВЛЕННЯ\n\n" +
-        `👜 Товар: ${item.title}\n` +
-        `💰 Ціна: ${item.price} грн\n\n` +
+        "🚗🆕 ЗАЯВКА STO\n\n" +
         `👤 ПІБ: ${sess.data.name}\n` +
         `📞 Контакт: ${sess.data.contact}\n` +
-        `📦 Доставка: ${sess.data.delivery}\n` +
-        `📝 Коментар: ${sess.data.comment}\n\n` +
-        `🆔 UserID: ${userId}\n` +
+        `🚘 Авто: ${sess.data.car}\n` +
+        `🛠️ Робота: ${sess.data.problem}\n` +
+        `🕒 Коли: ${sess.data.time}\n\n` +
+        `🆔 UserID: ${uid}\n` +
         `🔗 Username: ${username}`;
 
       try {
-        await ctx.telegram.sendMessage(ADMIN_ID, msg);
+        await ctx.telegram.sendMessage(ADMIN_ID, msg, contactBtn);
       } catch (e) {
         console.log("Не зміг відправити адміну:", e?.message || e);
       }
 
-      sessions.delete(userId);
-      setCooldown(userId);
+      sessions.delete(uid);
+      setCooldown(uid);
 
-      return ctx.reply("✅ Замовлення прийнято! Ми скоро з тобою зв’яжемось 🙌", mainMenu());
+      return ctx.reply("✅ Заявка прийнята! Ми скоро з тобою зв’яжемось 🙌", mainMenu());
     }
   }
 
-  // Підтримка: будь-який текст (коли він НЕ оформлює) — адміну
-  const usernameSupport = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
+  // Якщо не в заявці — вважаємо як підтримка і шлемо адміну
+  const username2 = ctx.from.username ? `@${ctx.from.username}` : "(нема юзернейма)";
   const forward =
-    "💬 ПОВІДОМЛЕННЯ В МАГАЗИН-БОТІ\n\n" +
+    "💬 ПОВІДОМЛЕННЯ (STO BOT)\n\n" +
     `Текст: ${text}\n\n` +
-    `🆔 UserID: ${userId}\n` +
-    `🔗 Username: ${usernameSupport}`;
+    `🆔 UserID: ${uid}\n` +
+    `🔗 Username: ${username2}`;
 
   try {
     await ctx.telegram.sendMessage(ADMIN_ID, forward);
@@ -232,12 +178,10 @@ bot.on("text", async (ctx) => {
   return ctx.reply("Прийняв ✅", mainMenu());
 });
 
-// -------- Щоб Render не падав
 bot.catch((err) => console.log("BOT ERROR:", err));
 
 (async () => {
   try {
-    // прибираємо webhook і чистимо старі апдейти
     await bot.telegram.deleteWebhook({ drop_pending_updates: true });
     await bot.launch({ dropPendingUpdates: true });
     console.log("Bot launched");
